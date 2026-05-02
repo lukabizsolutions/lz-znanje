@@ -1,10 +1,12 @@
 import { useState } from 'react';
-import { IDEAS, TAGS, T } from '../data.js';
-import { GhostButton, PrimaryButton, EditWithAIButton } from '../ui.jsx';
+import { TAGS, T } from '../data.js';
+import { GhostButton, PrimaryButton } from '../ui.jsx';
 import { IconPlus } from '../icons.jsx';
+import { useStore } from '../store.jsx';
+import { tagToPalette } from '../store.jsx';
 
 function IdeaCard({ idea, onOpen }) {
-  const [c1, c2] = idea.cover;
+  const [c1, c2] = idea.cover || ['#3A506B', '#F4F1DE'];
   return (
     <button onClick={onOpen} style={{ display: 'flex', flexDirection: 'column', gap: 10, textAlign: 'left', width: '100%' }}>
       <div className="lift" style={{
@@ -40,11 +42,30 @@ function IdeaCard({ idea, onOpen }) {
   );
 }
 
-function IdeaModal({ idea, onClose }) {
+function IdeaModal({ idea, onClose, onSave, onDelete }) {
   if (!idea) return null;
+  const isNew = idea.id === '__new__';
   const [title, setTitle] = useState(idea.title);
-  const [body, setBody] = useState(idea.body);
-  const [c1, c2] = idea.cover;
+  const [body, setBody] = useState(idea.body || '');
+  const [tag, setTag] = useState(idea.tag || 'zivot');
+  const [confirmDel, setConfirmDel] = useState(false);
+
+  const cover = tagToPalette(tag);
+  const [c1, c2] = cover;
+
+  const inp = {
+    width: '100%', padding: '9px 12px',
+    border: '1px solid oklch(1 0 0 / 0.25)', borderRadius: 7,
+    background: 'oklch(0 0 0 / 0.2)', color: c2,
+    fontSize: 14, outline: 'none', fontFamily: 'var(--font-sans)', boxSizing: 'border-box',
+  };
+
+  const submit = () => {
+    if (!title.trim()) return;
+    onSave({ ...idea, title: title.trim(), body: body.trim(), tag, cover });
+    onClose();
+  };
+
   return (
     <div onClick={onClose} style={{
       position: 'fixed', inset: 0, zIndex: 100,
@@ -55,8 +76,7 @@ function IdeaModal({ idea, onClose }) {
       <div onClick={e => e.stopPropagation()} style={{
         width: '100%', maxWidth: 720, maxHeight: '88vh', overflow: 'auto',
         background: 'var(--bg-raised)', border: '1px solid var(--border-strong)',
-        borderRadius: 16,
-        boxShadow: '0 40px 100px -30px oklch(0 0 0 / 0.5)',
+        borderRadius: 16, boxShadow: '0 40px 100px -30px oklch(0 0 0 / 0.5)',
         display: 'flex', flexDirection: 'column',
       }}>
         <div style={{
@@ -71,15 +91,14 @@ function IdeaModal({ idea, onClose }) {
             background: 'oklch(0 0 0 / 0.3)', color: c2,
             fontSize: 16, lineHeight: 1,
           }}>×</button>
-          <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 14, opacity: 0.85 }}>
-            <span className="mono" style={{
-              fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase',
-              padding: '3px 8px', background: 'oklch(0 0 0 / 0.28)', borderRadius: 99,
-            }}>{TAGS[idea.tag]?.label || idea.tag}</span>
-            <span className="mono" style={{ fontSize: 10.5, letterSpacing: '0.1em', textTransform: 'uppercase' }}>{idea.date}</span>
+          <div style={{ marginBottom: 14 }}>
+            <select value={tag} onChange={e => setTag(e.target.value)} style={inp}>
+              {Object.entries(TAGS).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+            </select>
           </div>
           <input value={title} onChange={e => setTitle(e.target.value)}
-            className="serif" style={{
+            className="serif" placeholder="Naslov ideje…" autoFocus
+            style={{
               width: '100%', border: 0, outline: 'none',
               background: 'transparent', color: c2,
               fontSize: 32, fontWeight: 600, letterSpacing: '-0.022em',
@@ -96,10 +115,20 @@ function IdeaModal({ idea, onClose }) {
               fontSize: 16, lineHeight: 1.65, resize: 'vertical',
               fontFamily: 'var(--font-serif)',
             }} />
-          <div style={{ display: 'flex', gap: 10, marginTop: 20, justifyContent: 'flex-end' }}>
-            <EditWithAIButton />
-            <GhostButton onClick={onClose} small>{T.common.close}</GhostButton>
-            <PrimaryButton onClick={onClose}>{T.common.save}</PrimaryButton>
+          <div style={{ display: 'flex', gap: 10, marginTop: 20, justifyContent: 'space-between', alignItems: 'center' }}>
+            {!isNew && (
+              <button onClick={() => confirmDel ? (onDelete(idea.id), onClose()) : setConfirmDel(true)} style={{
+                fontSize: 12, padding: '6px 10px', borderRadius: 6,
+                color: confirmDel ? 'oklch(0.65 0.2 15)' : 'var(--fg-subtle)',
+                border: confirmDel ? '1px solid oklch(0.65 0.2 15 / 0.4)' : '1px solid transparent',
+              }}>
+                {confirmDel ? T.common.confirmDelete : T.common.delete}
+              </button>
+            )}
+            <div style={{ display: 'flex', gap: 10, marginLeft: 'auto' }}>
+              <GhostButton onClick={onClose} small>{T.common.close}</GhostButton>
+              <PrimaryButton onClick={submit}>{T.common.save}</PrimaryButton>
+            </div>
           </div>
         </div>
       </div>
@@ -132,15 +161,25 @@ function NewIdeaTile({ onClick }) {
 }
 
 export default function IdeasScreen() {
+  const { ideas, ideaActions } = useStore();
   const [open, setOpen] = useState(null);
   const TC = T.common;
-  const draftIdea = { id: 'new', title: 'Nova ideja', body: '', tag: 'zivot', cover: ['#3A506B','#F4F1DE'], date: 'Danas' };
+  const newIdea = { id: '__new__', title: '', body: '', tag: 'zivot', cover: ['#3A506B', '#F4F1DE'], date: 'Danas' };
+
+  const handleSave = (idea) => {
+    if (idea.id === '__new__') {
+      ideaActions.add({ title: idea.title, body: idea.body, tag: idea.tag, cover: idea.cover });
+    } else {
+      ideaActions.update(idea.id, { title: idea.title, body: idea.body, tag: idea.tag, cover: idea.cover });
+    }
+  };
+
   return (
     <div className="screen-in">
       <div className="pad-page" style={{ padding: '36px 40px 28px', borderBottom: '1px solid var(--border)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: 20, flexWrap: 'wrap' }}>
           <div>
-            <div className="micro" style={{ marginBottom: 10 }}>{T.nav.ideas} · {IDEAS.length}</div>
+            <div className="micro" style={{ marginBottom: 10 }}>{T.nav.ideas} · {ideas.length}</div>
             <h1 className="serif hero-title" style={{
               margin: 0, fontSize: 38, fontWeight: 500, letterSpacing: '-0.022em',
             }}>{TC.ideasTitle}</h1>
@@ -148,24 +187,31 @@ export default function IdeasScreen() {
               {TC.ideasSubtitle}
             </div>
           </div>
-          <PrimaryButton icon={<IconPlus size={13} stroke={2} />} onClick={() => setOpen(draftIdea)}>
+          <PrimaryButton icon={<IconPlus size={13} stroke={2} />} onClick={() => setOpen(newIdea)}>
             {TC.addIdea}
           </PrimaryButton>
         </div>
       </div>
       <div className="pad-page" style={{ padding: '32px 40px 80px' }}>
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))',
-          gap: '24px 18px',
-        }}>
-          <NewIdeaTile onClick={() => setOpen(draftIdea)} />
-          {IDEAS.map(i => (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '24px 18px' }}>
+          <NewIdeaTile onClick={() => setOpen(newIdea)} />
+          {ideas.map(i => (
             <IdeaCard key={i.id} idea={i} onOpen={() => setOpen(i)} />
           ))}
         </div>
+        {ideas.length === 0 && (
+          <div style={{ padding: '40px 0', textAlign: 'center', color: 'var(--fg-muted)', gridColumn: '1/-1' }}>
+            <div className="serif" style={{ fontSize: 18, marginBottom: 8 }}>{TC.emptyIdeas}</div>
+            <div style={{ fontSize: 13 }}>{TC.emptyIdeasBody}</div>
+          </div>
+        )}
       </div>
-      <IdeaModal idea={open} onClose={() => setOpen(null)} />
+      <IdeaModal
+        idea={open}
+        onClose={() => setOpen(null)}
+        onSave={handleSave}
+        onDelete={id => ideaActions.remove(id)}
+      />
     </div>
   );
 }

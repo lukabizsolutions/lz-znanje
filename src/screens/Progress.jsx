@@ -1,6 +1,7 @@
-import { BOOKS, HEATMAP, T, YEAR_GOAL, BOOKS_THIS_YEAR, PAGES_TODAY, STREAK_DAYS, THIS_MONTH_BOOKS } from '../data.js';
+import { T } from '../data.js';
 import { TagPill, BookCover, ProgressBar } from '../ui.jsx';
 import { IconFlame } from '../icons.jsx';
+import { useStore } from '../store.jsx';
 
 function Widget({ title, eyebrow, action, children, span = 1, wide }) {
   return (
@@ -32,14 +33,26 @@ function HeatmapCell({ level }) {
   return <div style={{ width: 11, height: 11, borderRadius: 2.5, background: bg, border: `1px solid ${border}` }} />;
 }
 
-function Heatmap() {
+function Heatmap({ lessons }) {
+  const TC = T.common;
+  const now = new Date();
   const weeks = [];
-  for (let w = 0; w < 26; w++) {
+  for (let w = 25; w >= 0; w--) {
     const col = [];
-    for (let d = 0; d < 7; d++) col.push(HEATMAP[w * 7 + d]);
+    for (let d = 6; d >= 0; d--) {
+      const day = new Date(now);
+      day.setDate(now.getDate() - (w * 7 + d));
+      const dayStr = day.toDateString();
+      const count = lessons.filter(l => {
+        if (!l.id) return false;
+        const ts = parseInt(l.id);
+        return !isNaN(ts) && new Date(ts).toDateString() === dayStr;
+      }).length;
+      col.push(Math.min(4, count));
+    }
     weeks.push(col);
   }
-  const TC = T.common;
+
   return (
     <div>
       <div style={{
@@ -66,10 +79,7 @@ function Heatmap() {
           ))}
         </div>
       </div>
-      <div style={{
-        marginTop: 16, display: 'flex', alignItems: 'center', gap: 8,
-        fontSize: 11, color: 'var(--fg-subtle)',
-      }}>
+      <div style={{ marginTop: 16, display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, color: 'var(--fg-subtle)' }}>
         <span>{TC.less}</span>
         {[0,1,2,3,4].map(n => <HeatmapCell key={n} level={n} />)}
         <span>{TC.more}</span>
@@ -79,9 +89,25 @@ function Heatmap() {
 }
 
 export default function ProgressScreen({ onOpenBook }) {
+  const { books, lessons } = useStore();
   const TC = T.common;
-  const pct = Math.round((BOOKS_THIS_YEAR / YEAR_GOAL) * 100);
-  const monthBooks = THIS_MONTH_BOOKS.map(id => BOOKS.find(b => b.id === id));
+
+  const YEAR_GOAL = 12;
+  const thisYear = new Date().getFullYear();
+  const finishedThisYear = books.filter(b => b.finished && b.year === thisYear).length;
+  const pct = Math.round((finishedThisYear / YEAR_GOAL) * 100);
+
+  const reading = books.filter(b => !b.finished);
+  const totalLessons = lessons.length;
+
+  const topTagCounts = {};
+  lessons.forEach(l => { topTagCounts[l.tag] = (topTagCounts[l.tag] || 0) + 1; });
+  const topTags = Object.entries(topTagCounts).sort((a, b) => b[1] - a[1]).slice(0, 4).map(([t]) => t);
+
+  const topBook = books.reduce((best, b) => {
+    const count = lessons.filter(l => l.source?.id === b.id).length;
+    return count > (best.count || 0) ? { book: b, count } : best;
+  }, { book: null, count: 0 });
 
   return (
     <div className="screen-in">
@@ -96,127 +122,102 @@ export default function ProgressScreen({ onOpenBook }) {
       </div>
 
       <div className="pad-page" style={{ padding: '32px 40px 80px' }}>
-        <div className="progress-grid" style={{
-          display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 18,
-        }}>
-          <Widget span={2} eyebrow={TC.today} title={TC.pagesRead} wide>
-            <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12, marginTop: 8 }}>
-              <div className="serif" style={{
-                fontSize: 92, fontWeight: 500, letterSpacing: '-0.04em', lineHeight: 0.9,
-              }}>{PAGES_TODAY}</div>
-              <div style={{ fontSize: 13, color: 'var(--fg-muted)', paddingBottom: 10 }}>{TC.pages}</div>
+        <div className="progress-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 18 }}>
+          <Widget span={2} eyebrow={TC.lessonsCaptured} title={TC.thisQuarter} wide>
+            <div style={{ display: 'flex', alignItems: 'flex-end', gap: 10, marginTop: 8 }}>
+              <div className="serif" style={{ fontSize: 92, fontWeight: 500, letterSpacing: '-0.04em', lineHeight: 0.9 }}>{totalLessons}</div>
             </div>
-            <div style={{ marginTop: 'auto', display: 'flex', gap: 16, alignItems: 'center', flexWrap: 'wrap' }}>
-              <div style={{
-                display: 'inline-flex', alignItems: 'center', gap: 6,
-                padding: '5px 9px', border: '1px solid var(--border)',
-                borderRadius: 99, fontSize: 11.5, color: 'var(--fg-muted)',
-              }}>
-                <IconFlame size={12} />
-                <span>{STREAK_DAYS} {TC.streak}</span>
+            {topTags.length > 0 && (
+              <div style={{ marginTop: 'auto', display: 'flex', gap: 6, flexWrap: 'wrap', paddingTop: 16 }}>
+                {topTags.map(t => <TagPill key={t} tag={t} />)}
               </div>
-              <div style={{ fontSize: 11.5, color: 'var(--fg-subtle)' }}>{TC.goal} · 30 {TC.pages}</div>
-            </div>
+            )}
           </Widget>
 
-          <Widget span={4} eyebrow={TC.thisYear} title={TC.booksOf(BOOKS_THIS_YEAR, YEAR_GOAL)} wide
+          <Widget span={4} eyebrow={TC.thisYear} title={TC.booksOf(finishedThisYear, YEAR_GOAL)} wide
             action={<div style={{ fontFamily: 'var(--font-mono)', fontSize: 14, color: 'var(--accent-fg)' }}>{pct}%</div>}>
             <div style={{ marginTop: 8 }}>
-              <ProgressBar value={BOOKS_THIS_YEAR} max={YEAR_GOAL} height={10} />
+              <ProgressBar value={finishedThisYear} max={YEAR_GOAL} height={10} />
             </div>
-            <div style={{
-              marginTop: 18, display: 'grid',
-              gridTemplateColumns: `repeat(${YEAR_GOAL}, 1fr)`, gap: 3,
-            }}>
+            <div style={{ marginTop: 18, display: 'grid', gridTemplateColumns: `repeat(${YEAR_GOAL}, 1fr)`, gap: 3 }}>
               {Array.from({ length: YEAR_GOAL }).map((_, i) => (
                 <div key={i} style={{
                   height: 20,
-                  background: i < BOOKS_THIS_YEAR ? 'var(--accent)' : 'var(--bg-sunken)',
-                  border: i < BOOKS_THIS_YEAR ? 'none' : '1px solid var(--border)',
+                  background: i < finishedThisYear ? 'var(--accent)' : 'var(--bg-sunken)',
+                  border: i < finishedThisYear ? 'none' : '1px solid var(--border)',
                   borderRadius: 2,
-                  opacity: i < BOOKS_THIS_YEAR ? 0.3 + (i / YEAR_GOAL) * 0.7 : 1,
+                  opacity: i < finishedThisYear ? 0.3 + (i / YEAR_GOAL) * 0.7 : 1,
                 }} />
               ))}
             </div>
-            <div style={{
-              marginTop: 'auto', paddingTop: 16,
-              display: 'flex', justifyContent: 'space-between',
-              fontSize: 11.5, color: 'var(--fg-muted)', gap: 12, flexWrap: 'wrap',
-            }}>
-              <span>{TC.onPace} <span style={{ color: 'var(--fg)', fontWeight: 500 }}>26 {TC.books}</span></span>
-              <span>+2 {TC.ahead}</span>
+            <div style={{ marginTop: 'auto', paddingTop: 16, fontSize: 11.5, color: 'var(--fg-muted)' }}>
+              {TC.goal} · {YEAR_GOAL} knjiga
             </div>
           </Widget>
 
-          <Widget span={3} eyebrow={`${TC.thisMonth} · April`} title={TC.booksDone} wide>
-            <div style={{ display: 'flex', gap: 14, marginTop: 6, alignItems: 'flex-end', flexWrap: 'wrap' }}>
-              {monthBooks.map(b => b && (
-                <button key={b.id} onClick={() => onOpenBook(b.id)} style={{ textAlign: 'left' }}>
-                  <BookCover book={b} w={68} h={102} />
-                  <div className="serif" style={{
-                    fontSize: 11.5, marginTop: 8, width: 68,
-                    lineHeight: 1.2, color: 'var(--fg)', textWrap: 'balance',
-                  }}>{b.title}</div>
-                </button>
-              ))}
-            </div>
-            <div style={{ marginTop: 'auto', paddingTop: 18, fontSize: 11.5, color: 'var(--fg-muted)' }}>
-              4 knjige · prosek 3.1 {TC.day}/knjiga
-            </div>
+          <Widget span={3} eyebrow={TC.readingTime} title={TC.dailyAvg} wide>
+            {reading.length > 0 ? (
+              <div style={{ display: 'flex', gap: 14, marginTop: 6, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+                {reading.slice(0, 3).map(b => (
+                  <button key={b.id} onClick={() => onOpenBook(b.id)} style={{ textAlign: 'left' }}>
+                    <BookCover book={b} w={68} h={102} />
+                    <div className="serif" style={{ fontSize: 11.5, marginTop: 8, width: 68, lineHeight: 1.2, color: 'var(--fg)', textWrap: 'balance' }}>{b.title}</div>
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <div style={{ fontSize: 13, color: 'var(--fg-muted)', marginTop: 8 }}>Nema knjiga u čitanju.</div>
+            )}
           </Widget>
 
           <Widget span={3} eyebrow={TC.last6Months} title={TC.activity} wide>
-            <Heatmap />
+            <Heatmap lessons={lessons} />
           </Widget>
         </div>
 
-        <div className="progress-grid" style={{
-          marginTop: 18, display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 18,
-        }}>
-          <Widget eyebrow={TC.lessonsCaptured} title={TC.thisQuarter}>
+        <div className="progress-grid" style={{ marginTop: 18, display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 18 }}>
+          <Widget eyebrow="Biblioteka" title={TC.booksDone}>
             <div style={{ display: 'flex', alignItems: 'flex-end', gap: 10 }}>
-              <div className="serif" style={{
-                fontSize: 64, fontWeight: 500, letterSpacing: '-0.035em', lineHeight: 0.9,
-              }}>47</div>
-              <div style={{ fontSize: 12, color: 'var(--accent-fg)', paddingBottom: 8 }}>↑ 12 {TC.vsLastQ}</div>
+              <div className="serif" style={{ fontSize: 64, fontWeight: 500, letterSpacing: '-0.035em', lineHeight: 0.9 }}>
+                {books.filter(b => b.finished).length}
+              </div>
+              <div style={{ fontSize: 13, color: 'var(--fg-muted)', paddingBottom: 8 }}>knjiga</div>
             </div>
-            <div style={{ marginTop: 'auto', display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-              <TagPill tag="navike" />
-              <TagPill tag="fokus" />
-              <TagPill tag="sistemi" />
-              <TagPill tag="strategija" />
-            </div>
-          </Widget>
-
-          <Widget eyebrow={TC.readingTime} title={TC.dailyAvg}>
-            <div style={{ display: 'flex', alignItems: 'flex-end', gap: 10 }}>
-              <div className="serif" style={{
-                fontSize: 64, fontWeight: 500, letterSpacing: '-0.035em', lineHeight: 0.9,
-              }}>38</div>
-              <div style={{ fontSize: 13, color: 'var(--fg-muted)', paddingBottom: 8 }}>{TC.minPerDay}</div>
-            </div>
-            <div style={{ marginTop: 'auto', display: 'flex', alignItems: 'flex-end', gap: 3, height: 40 }}>
-              {[22,34,18,46,52,28,44,38,55,41,29,48,36].map((v, i) => (
-                <div key={i} style={{
-                  flex: 1, height: `${v}%`,
-                  background: i === 12 ? 'var(--accent)' : 'var(--border-strong)',
-                  borderRadius: 1,
-                }} />
-              ))}
+            <div style={{ marginTop: 'auto', fontSize: 11.5, color: 'var(--fg-subtle)' }}>
+              {books.length} ukupno · {reading.length} u čitanju
             </div>
           </Widget>
 
           <Widget eyebrow={TC.topSource} title={TC.mostCited}>
-            <div style={{ display: 'flex', gap: 14, alignItems: 'center', marginTop: 4 }}>
-              <BookCover book={BOOKS.find(b => b.id === 'atomic-habits')} w={60} h={88} />
-              <div>
-                <div className="serif" style={{ fontSize: 16, fontWeight: 500, marginBottom: 4 }}>Atomske navike</div>
-                <div style={{ fontSize: 11.5, color: 'var(--fg-muted)' }}>9 lekcija · 14 {TC.highlights}</div>
+            {topBook.book ? (
+              <>
+                <div style={{ display: 'flex', gap: 14, alignItems: 'center', marginTop: 4 }}>
+                  <BookCover book={topBook.book} w={60} h={88} />
+                  <div>
+                    <div className="serif" style={{ fontSize: 16, fontWeight: 500, marginBottom: 4 }}>{topBook.book.title}</div>
+                    <div style={{ fontSize: 11.5, color: 'var(--fg-muted)' }}>{topBook.count} {TC.highlights}</div>
+                  </div>
+                </div>
+                <div style={{ marginTop: 'auto', fontSize: 11.5, color: 'var(--fg-subtle)' }}>{topBook.book.author}</div>
+              </>
+            ) : (
+              <div style={{ fontSize: 13, color: 'var(--fg-muted)' }}>Još nema lekcija iz knjiga.</div>
+            )}
+          </Widget>
+
+          <Widget eyebrow="Teme" title={TC.mostRevisited.replace(':', '')}>
+            {topTags.length > 0 ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 4 }}>
+                {topTags.map(t => (
+                  <div key={t} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <TagPill tag={t} />
+                    <span style={{ fontSize: 11.5, color: 'var(--fg-muted)' }}>{topTagCounts[t]} lekcija</span>
+                  </div>
+                ))}
               </div>
-            </div>
-            <div style={{ marginTop: 'auto', fontSize: 11.5, color: 'var(--fg-subtle)', lineHeight: 1.5 }}>
-              {TC.mostRevisited} dizajn okruženja, navike bazirane na identitetu, pravilo 1%.
-            </div>
+            ) : (
+              <div style={{ fontSize: 13, color: 'var(--fg-muted)' }}>Dodaj lekcije da vidiš teme.</div>
+            )}
           </Widget>
         </div>
       </div>

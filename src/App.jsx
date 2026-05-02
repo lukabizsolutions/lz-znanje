@@ -1,8 +1,10 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { TweaksContext } from './context.jsx';
 import { FONT_PAIRS, TweaksPanel } from './Tweaks.jsx';
-import { BOOKS, LESSONS, T } from './data.js';
+import { T } from './data.js';
 import { BookCover } from './ui.jsx';
+import { StoreProvider, useStore, isLoggedIn, logoutUser } from './store.jsx';
+import LoginScreen from './Login.jsx';
 import {
   IconHome, IconLibrary, IconNotebook, IconProgress, IconMind,
   IconSearch, IconMoon, IconSun, IconSettings, IconBulb, IconPlay,
@@ -16,11 +18,8 @@ import VideosScreen from './screens/Videos.jsx';
 import ProgressScreen from './screens/Progress.jsx';
 
 const TWEAKS_DEFAULTS = {
-  accentHue: 250,
-  fontPair: 'all-inter',
-  density: 'comfortable',
-  coverStyle: 'gradient',
-  sidebarWidth: 204,
+  accentHue: 250, fontPair: 'all-inter',
+  density: 'comfortable', coverStyle: 'gradient', sidebarWidth: 204,
 };
 
 function useTheme() {
@@ -47,16 +46,13 @@ function useIsMobile() {
 function NavItem({ icon, label, active, disabled, badge, onClick }) {
   return (
     <button onClick={disabled ? undefined : onClick} disabled={disabled} style={{
-      position: 'relative',
-      display: 'flex', alignItems: 'center', gap: 11,
-      padding: '8px 14px 8px 18px',
-      width: '100%', textAlign: 'left',
+      position: 'relative', display: 'flex', alignItems: 'center', gap: 11,
+      padding: '8px 14px 8px 18px', width: '100%', textAlign: 'left',
       color: disabled ? 'var(--fg-subtle)' : (active ? 'var(--fg)' : 'var(--fg-muted)'),
       fontSize: 13.5, fontWeight: active ? 500 : 400,
       borderRadius: 7, cursor: disabled ? 'not-allowed' : 'pointer',
       background: active ? 'var(--hover-bg)' : 'transparent',
-      transition: 'color 140ms, background 140ms',
-      opacity: disabled ? 0.55 : 1,
+      transition: 'color 140ms, background 140ms', opacity: disabled ? 0.55 : 1,
     }}
     onMouseEnter={e => !disabled && !active && (e.currentTarget.style.color = 'var(--fg)')}
     onMouseLeave={e => !disabled && !active && (e.currentTarget.style.color = 'var(--fg-muted)')}>
@@ -69,23 +65,23 @@ function NavItem({ icon, label, active, disabled, badge, onClick }) {
       {badge && (
         <span className="mono" style={{
           fontSize: 9, letterSpacing: '0.1em', textTransform: 'uppercase',
-          padding: '2px 6px', border: '1px solid var(--border)',
-          borderRadius: 4, color: 'var(--fg-subtle)',
+          padding: '2px 6px', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--fg-subtle)',
         }}>{badge}</span>
       )}
     </button>
   );
 }
 
-function Sidebar({ route, onNav }) {
+function Sidebar({ route, onNav, onLogout }) {
+  const { books, lessons } = useStore();
   const items = [
-    { id: 'home',     label: T.nav.home,      icon: <IconHome size={15} /> },
-    { id: 'library',  label: T.nav.library,   icon: <IconLibrary size={15} /> },
-    { id: 'notebook', label: T.nav.notebook,  icon: <IconNotebook size={15} /> },
-    { id: 'ideas',    label: T.nav.ideas,     icon: <IconBulb size={15} /> },
-    { id: 'videos',   label: T.nav.videos,    icon: <IconPlay size={15} /> },
-    { id: 'progress', label: T.nav.progress,  icon: <IconProgress size={15} /> },
-    { id: 'mindmaps', label: T.nav.mindmaps,  icon: <IconMind size={15} />, disabled: true, badge: T.common.soon },
+    { id: 'home',     label: T.nav.home,     icon: <IconHome size={15} /> },
+    { id: 'library',  label: T.nav.library,  icon: <IconLibrary size={15} /> },
+    { id: 'notebook', label: T.nav.notebook, icon: <IconNotebook size={15} /> },
+    { id: 'ideas',    label: T.nav.ideas,    icon: <IconBulb size={15} /> },
+    { id: 'videos',   label: T.nav.videos,   icon: <IconPlay size={15} /> },
+    { id: 'progress', label: T.nav.progress, icon: <IconProgress size={15} /> },
+    { id: 'mindmaps', label: T.nav.mindmaps, icon: <IconMind size={15} />, disabled: true, badge: T.common.soon },
   ];
   const active = route.name === 'book' ? 'library' : route.name;
 
@@ -93,13 +89,11 @@ function Sidebar({ route, onNav }) {
     <aside className="hide-on-mobile" style={{
       width: 'var(--sidebar-w)', height: '100vh', position: 'sticky', top: 0,
       borderRight: '1px solid var(--border)', background: 'var(--bg)',
-      display: 'flex', flexDirection: 'column',
-      padding: '18px 10px 14px', flexShrink: 0,
+      display: 'flex', flexDirection: 'column', padding: '18px 10px 14px', flexShrink: 0,
     }}>
       <div style={{ padding: '4px 14px 22px', display: 'flex', alignItems: 'center', gap: 10 }}>
         <div style={{
-          width: 30, height: 30, borderRadius: 7,
-          background: 'var(--fg)', color: 'var(--bg)',
+          width: 30, height: 30, borderRadius: 7, background: 'var(--fg)', color: 'var(--bg)',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           fontFamily: 'var(--font-serif)', fontSize: 17, fontWeight: 600, letterSpacing: '-0.03em',
         }}>LZ</div>
@@ -115,41 +109,26 @@ function Sidebar({ route, onNav }) {
         ))}
       </nav>
 
-      <div style={{ marginTop: 28 }}>
-        <div className="micro" style={{ padding: '0 18px 10px' }}>Kolekcije</div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-          {[{ label: 'Biznis · Q2', count: 12 }, { label: 'Stoicizam', count: 6 }, { label: 'Veština proizvoda', count: 9 }].map(c => (
-            <button key={c.label} style={{
-              display: 'flex', alignItems: 'center', gap: 10,
-              padding: '7px 18px', width: '100%', textAlign: 'left',
-              color: 'var(--fg-muted)', fontSize: 12.5, borderRadius: 7,
-            }}
+      <div style={{ marginTop: 'auto', paddingTop: 14, borderTop: '1px solid var(--border)' }}>
+        <div style={{ padding: '4px 10px 0', display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div style={{
+            width: 28, height: 28, borderRadius: 999,
+            background: 'linear-gradient(135deg, oklch(0.7 0.14 250), oklch(0.6 0.15 320))',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            color: 'white', fontSize: 11.5, fontWeight: 600,
+          }}>LZ</div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 12.5, fontWeight: 500 }}>Moja baza</div>
+            <div className="micro" style={{ fontSize: 9 }}>{books.length} knjiga · {lessons.length} lekcija</div>
+          </div>
+          <button onClick={onLogout} title={T.common.logout} style={{ color: 'var(--fg-subtle)', padding: 4 }}
             onMouseEnter={e => e.currentTarget.style.color = 'var(--fg)'}
-            onMouseLeave={e => e.currentTarget.style.color = 'var(--fg-muted)'}>
-              <span style={{ width: 6, height: 6, borderRadius: 2, background: 'var(--accent)', opacity: 0.7 }} />
-              <span style={{ flex: 1 }}>{c.label}</span>
-              <span style={{ color: 'var(--fg-subtle)', fontSize: 11 }}>{c.count}</span>
-            </button>
-          ))}
+            onMouseLeave={e => e.currentTarget.style.color = 'var(--fg-subtle)'}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>
+            </svg>
+          </button>
         </div>
-      </div>
-
-      <div style={{
-        marginTop: 'auto', paddingTop: 14,
-        borderTop: '1px solid var(--border)',
-        display: 'flex', alignItems: 'center', gap: 10, padding: '12px 10px 2px',
-      }}>
-        <div style={{
-          width: 28, height: 28, borderRadius: 999,
-          background: 'linear-gradient(135deg, oklch(0.7 0.14 250), oklch(0.6 0.15 320))',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          color: 'white', fontSize: 11.5, fontWeight: 600,
-        }}>LP</div>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 12.5, fontWeight: 500 }}>Luka P.</div>
-          <div className="micro" style={{ fontSize: 9 }}>Slobodan · 18 / ∞</div>
-        </div>
-        <button style={{ color: 'var(--fg-subtle)' }}><IconSettings size={14} /></button>
       </div>
     </aside>
   );
@@ -166,10 +145,8 @@ function MobileBottomNav({ route, onNav }) {
   const active = route.name === 'book' ? 'library' : route.name;
   return (
     <nav className="mobile-nav" style={{
-      position: 'fixed', left: 0, right: 0, bottom: 0, zIndex: 40,
-      display: 'none',
-      background: 'color-mix(in srgb, var(--bg) 92%, transparent)',
-      backdropFilter: 'blur(14px)',
+      position: 'fixed', left: 0, right: 0, bottom: 0, zIndex: 40, display: 'none',
+      background: 'color-mix(in srgb, var(--bg) 92%, transparent)', backdropFilter: 'blur(14px)',
       borderTop: '1px solid var(--border)',
       padding: 'calc(8px + env(safe-area-inset-bottom)) 6px 8px',
       justifyContent: 'space-around', alignItems: 'center',
@@ -180,8 +157,7 @@ function MobileBottomNav({ route, onNav }) {
           <button key={it.id} onClick={() => onNav({ name: it.id })} style={{
             flex: 1, display: 'flex', flexDirection: 'column',
             alignItems: 'center', gap: 3, padding: '6px 4px',
-            color: on ? 'var(--fg)' : 'var(--fg-muted)',
-            fontSize: 10, fontWeight: 500,
+            color: on ? 'var(--fg)' : 'var(--fg-muted)', fontSize: 10, fontWeight: 500,
           }}>
             <div style={{ position: 'relative' }}>
               {it.icon}
@@ -199,6 +175,7 @@ function MobileBottomNav({ route, onNav }) {
 }
 
 function CommandBar({ onOpenBook }) {
+  const { books, lessons } = useStore();
   const [focused, setFocused] = useState(false);
   const [q, setQ] = useState('');
   const ref = useRef(null);
@@ -217,19 +194,17 @@ function CommandBar({ onOpenBook }) {
     if (!q.trim()) return null;
     const qq = q.toLowerCase();
     return {
-      books: BOOKS.filter(b => b.title.toLowerCase().includes(qq) || b.author.toLowerCase().includes(qq)).slice(0, 4),
-      lessons: LESSONS.filter(l => l.title.toLowerCase().includes(qq) || l.body.toLowerCase().includes(qq)).slice(0, 4),
+      books:   books.filter(b => b.title.toLowerCase().includes(qq) || b.author.toLowerCase().includes(qq)).slice(0, 4),
+      lessons: lessons.filter(l => l.title.toLowerCase().includes(qq) || l.body.toLowerCase().includes(qq)).slice(0, 4),
     };
-  }, [q]);
+  }, [q, books, lessons]);
 
   return (
     <div style={{ position: 'relative', flex: 1, maxWidth: 520 }}>
       <div style={{
-        display: 'flex', alignItems: 'center', gap: 10,
-        padding: '8px 12px',
+        display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px',
         border: '1px solid', borderColor: focused ? 'var(--border-strong)' : 'var(--border)',
-        borderRadius: 9, background: 'var(--bg-raised)',
-        transition: 'border-color 140ms',
+        borderRadius: 9, background: 'var(--bg-raised)', transition: 'border-color 140ms',
       }}>
         <IconSearch size={14} style={{ color: 'var(--fg-subtle)' }} />
         <input ref={ref} value={q} onChange={e => setQ(e.target.value)}
@@ -273,7 +248,7 @@ function CommandBar({ onOpenBook }) {
               {results.lessons.map(l => (
                 <div key={l.id} style={{ padding: '8px', borderRadius: 6, fontSize: 13 }}>
                   <div style={{ fontWeight: 500 }}>{l.title}</div>
-                  <div className="micro" style={{ marginTop: 3 }}>{l.source.label}</div>
+                  <div className="micro" style={{ marginTop: 3 }}>{l.source?.label || l.tag}</div>
                 </div>
               ))}
             </>
@@ -284,32 +259,21 @@ function CommandBar({ onOpenBook }) {
   );
 }
 
-function MobileLogo() {
-  return (
-    <div className="show-on-mobile" style={{
-      display: 'none', alignItems: 'center', gap: 8, marginRight: 12,
-    }}>
-      <div style={{
-        width: 28, height: 28, borderRadius: 6,
-        background: 'var(--fg)', color: 'var(--bg)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        fontFamily: 'var(--font-serif)', fontSize: 15, fontWeight: 600, letterSpacing: '-0.03em',
-      }}>LZ</div>
-    </div>
-  );
-}
-
 function TopBar({ theme, setTheme, onOpenBook, onToggleTweaks }) {
   return (
     <header className="topbar" style={{
       position: 'sticky', top: 0, zIndex: 30,
-      display: 'flex', alignItems: 'center', gap: 10,
-      padding: '14px 40px',
+      display: 'flex', alignItems: 'center', gap: 10, padding: '14px 40px',
       background: 'color-mix(in srgb, var(--bg) 84%, transparent)',
-      backdropFilter: 'blur(14px)',
-      borderBottom: '1px solid var(--border)',
+      backdropFilter: 'blur(14px)', borderBottom: '1px solid var(--border)',
     }}>
-      <MobileLogo />
+      <div className="show-on-mobile" style={{ display: 'none', alignItems: 'center', gap: 8, marginRight: 12 }}>
+        <div style={{
+          width: 28, height: 28, borderRadius: 6, background: 'var(--fg)', color: 'var(--bg)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontFamily: 'var(--font-serif)', fontSize: 15, fontWeight: 600, letterSpacing: '-0.03em',
+        }}>LZ</div>
+      </div>
       <CommandBar onOpenBook={onOpenBook} />
       <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
         <button onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')} style={{
@@ -323,28 +287,21 @@ function TopBar({ theme, setTheme, onOpenBook, onToggleTweaks }) {
         <button onClick={onToggleTweaks} className="hide-on-mobile" style={{
           padding: '7px 11px', fontSize: 11.5, fontFamily: 'var(--font-mono)',
           letterSpacing: '0.1em', textTransform: 'uppercase',
-          border: '1px solid var(--border)', borderRadius: 8,
-          color: 'var(--fg-muted)',
+          border: '1px solid var(--border)', borderRadius: 8, color: 'var(--fg-muted)',
         }}>{T.common.tweaks}</button>
-        <div style={{
-          width: 32, height: 32, borderRadius: 999,
-          background: 'linear-gradient(135deg, oklch(0.7 0.14 250), oklch(0.6 0.15 320))',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          color: 'white', fontSize: 12, fontWeight: 600,
-          border: '1px solid var(--border)',
-        }}>LP</div>
       </div>
     </header>
   );
 }
 
-export default function App() {
+function AppShell() {
   const [theme, setTheme] = useTheme();
   const [route, setRoute] = useState(() => {
     try { return JSON.parse(localStorage.getItem('lz-route') || '{"name":"home"}'); } catch { return { name: 'home' }; }
   });
   const [tweaksOpen, setTweaksOpen] = useState(false);
   const [tweaks, setTweaks] = useState(TWEAKS_DEFAULTS);
+  const [loggedIn, setLoggedIn] = useState(isLoggedIn);
   const isMobile = useIsMobile();
 
   useEffect(() => {
@@ -364,19 +321,11 @@ export default function App() {
     document.body.style.fontSize = `${14 * density}px`;
   }, [tweaks, isMobile]);
 
-  useEffect(() => {
-    const onMsg = (e) => {
-      const t = e.data?.type;
-      if (t === '__activate_edit_mode') setTweaksOpen(true);
-      if (t === '__deactivate_edit_mode') setTweaksOpen(false);
-    };
-    window.addEventListener('message', onMsg);
-    try { window.parent.postMessage({ type: '__edit_mode_available' }, '*'); } catch {}
-    return () => window.removeEventListener('message', onMsg);
-  }, []);
+  if (!loggedIn) return <LoginScreen onLogin={() => setLoggedIn(true)} />;
 
   const nav = (r) => setRoute(r);
   const openBook = (id) => setRoute({ name: 'book', id });
+  const handleLogout = () => { logoutUser(); setLoggedIn(false); };
 
   let Screen = null;
   if (route.name === 'home')          Screen = <HomeScreen onOpenBook={openBook} />;
@@ -391,7 +340,7 @@ export default function App() {
   return (
     <TweaksContext.Provider value={tweaks}>
       <div style={{ display: 'flex', minHeight: '100vh' }}>
-        <Sidebar route={route} onNav={nav} />
+        <Sidebar route={route} onNav={nav} onLogout={handleLogout} />
         <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
           <TopBar theme={theme} setTheme={setTheme} onOpenBook={openBook}
                   onToggleTweaks={() => setTweaksOpen(o => !o)} />
@@ -402,5 +351,13 @@ export default function App() {
                      tweaks={tweaks} setTweaks={setTweaks} />
       </div>
     </TweaksContext.Provider>
+  );
+}
+
+export default function App() {
+  return (
+    <StoreProvider>
+      <AppShell />
+    </StoreProvider>
   );
 }

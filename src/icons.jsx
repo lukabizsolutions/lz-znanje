@@ -25,3 +25,5 @@ export const IconChevDown = (p) => <Icon {...p}><path d="m6 9 6 6 6-6"/></Icon>;
 export const IconFlame    = (p) => <Icon {...p}><path d="M12 3s4 3.5 4 8a4 4 0 0 1-8 0c0-1.5.5-2 1-3 0 3 2 3 3 2 0 0 0-3-2-5 1 0 2 .5 2-2"/></Icon>;
 export const IconBulb     = (p) => <Icon {...p}><path d="M9 18h6"/><path d="M10 22h4"/><path d="M12 2a7 7 0 0 0-4 12.7c1 .7 1.5 1.3 1.5 2.3v1h5v-1c0-1 .5-1.6 1.5-2.3A7 7 0 0 0 12 2z"/></Icon>;
 export const IconPlay     = (p) => <Icon {...p}><path d="M5 4 19 12 5 20z" fill="currentColor"/></Icon>;
+export const IconTrash    = (p) => <Icon {...p}><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></Icon>;
+export const IconVideo    = (p) => <Icon {...p}><path d="M15 10l4.55-2.73A1 1 0 0 1 21 8.27v7.46a1 1 0 0 1-1.45.9L15 14"/><rect x="2" y="7" width="13" height="10" rx="2"/></Icon>;

@@ -1,18 +1,57 @@
-import { BOOKS, BOOK_DETAILS, T } from '../data.js';
-import { TagPill, AIBadge, GhostButton, PrimaryButton, EditWithAIButton, BookCover, SectionHeader, ProgressBar } from '../ui.jsx';
+import { useState, useEffect } from 'react';
+import { TAGS, T } from '../data.js';
+import { TagPill, GhostButton, PrimaryButton, BookCover, SectionHeader } from '../ui.jsx';
 import { IconBookmark, IconPlus } from '../icons.jsx';
+import { useStore } from '../store.jsx';
 
-function LessonDetailCard({ lesson }) {
+function LessonDetailCard({ lesson, onDelete, onUpdate }) {
+  const [editing, setEditing] = useState(false);
+  const [title, setTitle] = useState(lesson.title);
+  const [body, setBody] = useState(lesson.body);
+  const [confirmDel, setConfirmDel] = useState(false);
+  const [hovered, setHovered] = useState(false);
+
+  const save = () => {
+    if (title.trim()) onUpdate(lesson.id, { title: title.trim(), body: body.trim() });
+    setEditing(false);
+  };
+
+  if (editing) return (
+    <div style={{ padding: 22, border: '1px solid var(--border-strong)', borderRadius: 10, background: 'var(--bg-raised)', display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <input value={title} onChange={e => setTitle(e.target.value)}
+        className="serif" style={{ border: 0, outline: 'none', background: 'transparent', color: 'var(--fg)', fontSize: 21, fontWeight: 500, letterSpacing: '-0.015em', fontFamily: 'var(--font-serif)', width: '100%' }} />
+      <textarea value={body} onChange={e => setBody(e.target.value)}
+        style={{ border: 0, outline: 'none', background: 'transparent', color: 'var(--fg-muted)', fontSize: 14, lineHeight: 1.6, resize: 'vertical', minHeight: 80, fontFamily: 'var(--font-sans)', width: '100%' }} />
+      <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+        <button onClick={() => setEditing(false)} style={{ padding: '6px 12px', fontSize: 12, color: 'var(--fg-muted)', borderRadius: 6, border: '1px solid var(--border)' }}>{T.common.cancel}</button>
+        <PrimaryButton onClick={save}>{T.common.save}</PrimaryButton>
+      </div>
+    </div>
+  );
+
   return (
     <div className="lift" style={{
       padding: 22, border: '1px solid var(--border)',
       borderRadius: 10, background: 'var(--bg-raised)',
+      position: 'relative',
+      borderColor: hovered ? 'var(--border-strong)' : 'var(--border)',
     }}
-    onMouseEnter={e => e.currentTarget.style.borderColor = 'var(--border-strong)'}
-    onMouseLeave={e => e.currentTarget.style.borderColor = 'var(--border)'}>
+    onMouseEnter={() => setHovered(true)}
+    onMouseLeave={() => { setHovered(false); setConfirmDel(false); }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
         <TagPill tag={lesson.tag} />
-        <EditWithAIButton />
+        {hovered && (
+          <div style={{ display: 'flex', gap: 6 }}>
+            <button onClick={() => setEditing(true)} style={{ fontSize: 11.5, color: 'var(--fg-muted)', padding: '2px 8px', borderRadius: 4, border: '1px solid var(--border)' }}>Uredi</button>
+            <button onClick={() => confirmDel ? onDelete(lesson.id) : setConfirmDel(true)} style={{
+              fontSize: 11.5, padding: '2px 8px', borderRadius: 4,
+              color: confirmDel ? 'oklch(0.65 0.2 15)' : 'var(--fg-muted)',
+              border: confirmDel ? '1px solid oklch(0.65 0.2 15 / 0.4)' : '1px solid var(--border)',
+            }}>
+              {confirmDel ? T.common.confirmDelete : T.common.delete}
+            </button>
+          </div>
+        )}
       </div>
       <h4 className="serif" style={{
         margin: '0 0 10px', fontSize: 21, fontWeight: 500,
@@ -23,7 +62,7 @@ function LessonDetailCard({ lesson }) {
   );
 }
 
-function EmptyState({ title, body, action }) {
+function EmptyState({ title, body, onAdd }) {
   return (
     <div style={{
       padding: '36px 24px', borderRadius: 10,
@@ -34,22 +73,75 @@ function EmptyState({ title, body, action }) {
       <div className="stripe" style={{ width: 36, height: 36, borderRadius: 7, opacity: 0.6 }} />
       <div className="serif" style={{ fontSize: 17, fontWeight: 500 }}>{title}</div>
       <div style={{ fontSize: 13, color: 'var(--fg-muted)', maxWidth: 420 }}>{body}</div>
-      {action && <button style={{ marginTop: 6, fontSize: 12.5, fontWeight: 500, color: 'var(--accent-fg)' }}>{action} →</button>}
+      {onAdd && <button onClick={onAdd} style={{ marginTop: 6, fontSize: 12.5, fontWeight: 500, color: 'var(--accent-fg)' }}>{T.common.addFirstLesson} →</button>}
+    </div>
+  );
+}
+
+function AddLessonModal({ book, onClose, onSave }) {
+  const [title, setTitle] = useState('');
+  const [body, setBody] = useState('');
+  const [tag, setTag] = useState(book.tag || 'navike');
+
+  const inp = {
+    width: '100%', padding: '9px 12px',
+    border: '1px solid var(--border)', borderRadius: 7,
+    background: 'var(--bg-sunken)', color: 'var(--fg)',
+    fontSize: 14, outline: 'none', fontFamily: 'var(--font-sans)', boxSizing: 'border-box',
+  };
+
+  const submit = () => {
+    if (!title.trim()) return;
+    onSave({
+      title: title.trim(), body: body.trim(), tag,
+      source: { kind: 'book', id: book.id, label: book.title },
+    });
+    onClose();
+  };
+
+  return (
+    <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 100, background: 'oklch(0 0 0 / 0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+      <div onClick={e => e.stopPropagation()} style={{
+        width: '100%', maxWidth: 520, background: 'var(--bg-raised)', border: '1px solid var(--border-strong)',
+        borderRadius: 14, padding: '28px 28px 24px', boxShadow: '0 40px 100px -30px oklch(0 0 0 / 0.5)',
+        display: 'flex', flexDirection: 'column', gap: 12,
+      }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+          <div className="serif" style={{ fontSize: 22, fontWeight: 500 }}>{T.common.addLesson}</div>
+          <button onClick={onClose} style={{ color: 'var(--fg-subtle)', fontSize: 22, lineHeight: 1 }}>×</button>
+        </div>
+        <input value={title} onChange={e => setTitle(e.target.value)} placeholder={T.common.title} style={inp} autoFocus />
+        <textarea value={body} onChange={e => setBody(e.target.value)} placeholder="Šta si naučio?" style={{ ...inp, minHeight: 120, resize: 'vertical', lineHeight: 1.6 }} />
+        <select value={tag} onChange={e => setTag(e.target.value)} style={inp}>
+          {Object.entries(TAGS).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+        </select>
+        <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 4 }}>
+          <button onClick={onClose} style={{ padding: '8px 14px', fontSize: 13, color: 'var(--fg-muted)', borderRadius: 7, border: '1px solid var(--border)' }}>{T.common.cancel}</button>
+          <PrimaryButton onClick={submit}>{T.common.save}</PrimaryButton>
+        </div>
+      </div>
     </div>
   );
 }
 
 export default function BookDetailScreen({ bookId, onBack }) {
+  const { books, lessons, lessonActions, bookActions } = useStore();
   const TC = T.common;
-  const book = BOOKS.find(b => b.id === bookId);
-  const detail = BOOK_DETAILS[bookId];
+  const book = books.find(b => b.id === bookId);
+  const bookLessons = lessons.filter(l => l.source?.id === bookId);
+  const [notes, setNotes] = useState('');
+  const [notesDirty, setNotesDirty] = useState(false);
+  const [addingLesson, setAddingLesson] = useState(false);
+
+  useEffect(() => {
+    if (book) setNotes(book.notes || '');
+  }, [bookId]);
 
   if (!book) return <div style={{ padding: 60 }}>Knjiga nije pronađena.</div>;
 
-  const d = detail || {
-    description: 'Dodata u biblioteku. Još nema zabeleženih lekcija — počni tako što ćeš obeležiti pasus tokom čitanja.',
-    dateRead: book.finished ? `${TC.read} · ${book.year}` : TC.reading,
-    lessons: [], notes: '', summary: null,
+  const saveNotes = () => {
+    bookActions.update(book.id, { notes });
+    setNotesDirty(false);
   };
 
   return (
@@ -72,7 +164,9 @@ export default function BookDetailScreen({ bookId, onBack }) {
         }}>
           <BookCover book={book} w={240} h={340} />
           <div style={{ paddingBottom: 14 }}>
-            <div className="micro" style={{ marginBottom: 12 }}>{d.dateRead}</div>
+            <div className="micro" style={{ marginBottom: 12 }}>
+              {book.finished ? `${TC.read} · ${book.year}` : TC.reading}
+            </div>
             <h1 className="serif" style={{
               margin: '0 0 8px', fontSize: 52, fontWeight: 500,
               letterSpacing: '-0.028em', lineHeight: 1, textWrap: 'balance',
@@ -80,15 +174,9 @@ export default function BookDetailScreen({ bookId, onBack }) {
             <div style={{ fontSize: 16, color: 'var(--fg-muted)', marginBottom: 22 }}>
               autor · <span style={{ color: 'var(--fg)' }}>{book.author}</span>
             </div>
-            <p className="serif" style={{
-              margin: 0, fontSize: 18, lineHeight: 1.5,
-              color: 'var(--fg-muted)', fontStyle: 'italic',
-              maxWidth: 640, textWrap: 'pretty',
-            }}>"{d.description}"</p>
             <div style={{ display: 'flex', gap: 10, marginTop: 24, flexWrap: 'wrap' }}>
-              <GhostButton icon={<IconBookmark size={12} />}>Sačuvano</GhostButton>
-              <GhostButton>{book.pages} {TC.pages}</GhostButton>
-              <GhostButton>{book.finished ? TC.finished : `${book.progress}% pročitano`}</GhostButton>
+              {book.pages > 0 && <GhostButton>{book.pages} {TC.pages}</GhostButton>}
+              <GhostButton>{book.finished ? TC.finished : `${book.progress || 0}% pročitano`}</GhostButton>
             </div>
           </div>
         </div>
@@ -99,109 +187,58 @@ export default function BookDetailScreen({ bookId, onBack }) {
           <SectionHeader
             eyebrow="01"
             title={TC.myLessons}
-            subtitle={`${d.lessons.length} zabeleženih uvida, svojim rečima`}
-            action={<GhostButton icon={<IconPlus size={12} stroke={2} />} small>{TC.addLesson}</GhostButton>}
+            subtitle={`${bookLessons.length} zabeleženih uvida`}
+            action={<GhostButton icon={<IconPlus size={12} stroke={2} />} small onClick={() => setAddingLesson(true)}>{TC.addLesson}</GhostButton>}
           />
-          {d.lessons.length > 0 ? (
+          {bookLessons.length > 0 ? (
             <div style={{ display: 'grid', gap: 16 }}>
-              {d.lessons.map(l => <LessonDetailCard key={l.id} lesson={l} />)}
+              {bookLessons.map(l => (
+                <LessonDetailCard
+                  key={l.id}
+                  lesson={l}
+                  onDelete={id => lessonActions.remove(id)}
+                  onUpdate={(id, changes) => lessonActions.update(id, changes)}
+                />
+              ))}
             </div>
           ) : (
-            <EmptyState title={TC.noLessons} body={TC.noLessonsBody} action={TC.addFirstLesson} />
+            <EmptyState title={TC.noLessons} body={TC.noLessonsBody} onAdd={() => setAddingLesson(true)} />
           )}
         </section>
 
-        <section style={{ marginBottom: 56 }}>
+        <section>
           <SectionHeader
             eyebrow="02"
             title={TC.myNotes}
             subtitle="Slobodno razmišljanje, reakcije, pitanja"
-            action={<EditWithAIButton />}
+            action={notesDirty && <PrimaryButton onClick={saveNotes}>{TC.save}</PrimaryButton>}
           />
           <div style={{
             padding: 24, border: '1px solid var(--border)',
             borderRadius: 10, background: 'var(--bg-raised)', minHeight: 160,
           }}>
-            {d.notes ? (
-              <div className="serif" style={{
-                fontSize: 15.5, lineHeight: 1.7, color: 'var(--fg)',
-                whiteSpace: 'pre-wrap', fontFamily: 'var(--font-serif)',
-              }}>{d.notes}</div>
-            ) : (
-              <div style={{ color: 'var(--fg-subtle)', fontSize: 14 }}>{TC.notesPlaceholder}</div>
-            )}
+            <textarea
+              value={notes}
+              onChange={e => { setNotes(e.target.value); setNotesDirty(true); }}
+              placeholder={TC.notesPlaceholder}
+              style={{
+                width: '100%', minHeight: 140, border: 0, outline: 'none',
+                background: 'transparent', color: 'var(--fg)',
+                fontSize: 15.5, lineHeight: 1.7, resize: 'none',
+                fontFamily: 'var(--font-serif)', boxSizing: 'border-box',
+              }}
+            />
           </div>
         </section>
-
-        {d.summary && (
-          <section style={{ position: 'relative' }}>
-            <div className="grain" style={{
-              position: 'relative', overflow: 'hidden',
-              padding: '36px 36px 40px',
-              border: '1px solid var(--border)', borderRadius: 14,
-              background: 'var(--bg-ai)',
-              backgroundImage: 'radial-gradient(800px 400px at 85% 0%, oklch(0.68 0.18 var(--accent-h) / 0.06), transparent 60%)',
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 22 }}>
-                <AIBadge />
-                <div className="micro" style={{ color: 'var(--fg-subtle)' }}>{TC.aiBadgeNote}</div>
-              </div>
-
-              <h2 className="serif" style={{
-                margin: '0 0 4px', fontSize: 28, fontWeight: 500, letterSpacing: '-0.02em',
-              }}>{TC.aiSummary}</h2>
-              <div style={{ fontSize: 13, color: 'var(--fg-muted)', marginBottom: 28 }}>
-                Sinteza argumenta knjige — dva pasusa, pet ključnih ideja, teme.
-              </div>
-
-              <div className="summary-paragraphs" style={{
-                display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 28, marginBottom: 36,
-              }}>
-                {d.summary.paragraphs.map((p, i) => (
-                  <p key={i} className="serif" style={{
-                    margin: 0, fontSize: 15.5, lineHeight: 1.65, color: 'var(--fg)', textWrap: 'pretty',
-                  }}>
-                    <span style={{
-                      fontSize: 11, fontFamily: 'var(--font-mono)',
-                      color: 'var(--accent-fg)', marginRight: 8, verticalAlign: 'text-top',
-                    }}>0{i + 1}</span>
-                    {p}
-                  </p>
-                ))}
-              </div>
-
-              <div className="micro" style={{ marginBottom: 16 }}>{TC.fiveKeyIdeas}</div>
-              <div style={{ display: 'grid', gap: 2, borderTop: '1px solid var(--border)' }}>
-                {d.summary.ideas.map((idea, i) => (
-                  <div key={i} style={{
-                    display: 'grid', gridTemplateColumns: '40px 1fr',
-                    gap: 16, padding: '18px 0', borderBottom: '1px solid var(--border)',
-                  }}>
-                    <div className="mono" style={{ fontSize: 11, color: 'var(--accent-fg)', paddingTop: 3 }}>0{i + 1}</div>
-                    <div>
-                      <div className="serif" style={{
-                        fontSize: 17, fontWeight: 600, marginBottom: 6, letterSpacing: '-0.01em',
-                      }}>{idea.title}</div>
-                      <div style={{ fontSize: 13.5, color: 'var(--fg-muted)', lineHeight: 1.55 }}>{idea.body}</div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              <div style={{ marginTop: 28, display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
-                <div className="micro" style={{ marginRight: 4 }}>{TC.themes}</div>
-                {d.summary.themes.map(t => (
-                  <span key={t} className="pill" style={{
-                    '--pill-border': 'var(--border)',
-                    '--pill-fg': 'var(--fg-muted)',
-                    '--pill-bg': 'var(--bg-sunken)',
-                  }}>{t}</span>
-                ))}
-              </div>
-            </div>
-          </section>
-        )}
       </div>
+
+      {addingLesson && (
+        <AddLessonModal
+          book={book}
+          onClose={() => setAddingLesson(false)}
+          onSave={item => lessonActions.add(item)}
+        />
+      )}
     </div>
   );
 }
