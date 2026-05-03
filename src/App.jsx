@@ -3,7 +3,7 @@ import { TweaksContext } from './context.jsx';
 import { FONT_PAIRS, TweaksPanel } from './Tweaks.jsx';
 import { T } from './data.js';
 import { BookCover } from './ui.jsx';
-import { StoreProvider, useStore, isLoggedIn, logoutUser } from './store.jsx';
+import { StoreProvider, useStore, checkSession, onAuthChange, logout } from './store.jsx';
 import LoginScreen from './Login.jsx';
 import {
   IconHome, IconLibrary, IconNotebook, IconProgress, IconMind,
@@ -301,8 +301,14 @@ function AppShell() {
   });
   const [tweaksOpen, setTweaksOpen] = useState(false);
   const [tweaks, setTweaks] = useState(TWEAKS_DEFAULTS);
-  const [loggedIn, setLoggedIn] = useState(isLoggedIn);
+  const [loggedIn, setLoggedIn] = useState(false);
+  const [authReady, setAuthReady] = useState(false);
   const isMobile = useIsMobile();
+
+  useEffect(() => {
+    checkSession().then(ok => { setLoggedIn(ok); setAuthReady(true); });
+    return onAuthChange(setLoggedIn);
+  }, []);
 
   useEffect(() => {
     try { localStorage.setItem('lz-route', JSON.stringify(route)); } catch {}
@@ -321,11 +327,12 @@ function AppShell() {
     document.body.style.fontSize = `${14 * density}px`;
   }, [tweaks, isMobile]);
 
+  if (!authReady) return null;
   if (!loggedIn) return <LoginScreen onLogin={() => setLoggedIn(true)} />;
 
   const nav = (r) => setRoute(r);
   const openBook = (id) => setRoute({ name: 'book', id });
-  const handleLogout = () => { logoutUser(); setLoggedIn(false); };
+  const handleLogout = () => { logout(); setLoggedIn(false); };
 
   let Screen = null;
   if (route.name === 'home')          Screen = <HomeScreen onOpenBook={openBook} />;

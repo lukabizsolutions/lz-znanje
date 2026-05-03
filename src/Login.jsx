@@ -1,23 +1,19 @@
 import { useState } from 'react';
-import { hasPassword, setPassword, verifyPassword, loginUser } from './store.jsx';
+import { login } from './store.jsx';
 import { T } from './data.js';
 
 export default function LoginScreen({ onLogin }) {
-  const firstTime = !hasPassword();
-  const [pwd, setPwd]   = useState('');
-  const [pwd2, setPwd2] = useState('');
-  const [err, setErr]   = useState('');
+  const [pwd, setPwd]         = useState('');
+  const [err, setErr]         = useState('');
+  const [loading, setLoading] = useState(false);
 
-  const submit = (e) => {
+  const submit = async (e) => {
     e.preventDefault();
-    if (firstTime) {
-      if (pwd.length < 4) return setErr('Lozinka mora imati najmanje 4 karaktera.');
-      if (pwd !== pwd2)   return setErr('Lozinke se ne podudaraju.');
-      setPassword(pwd);
-    } else {
-      if (!verifyPassword(pwd)) return setErr('Pogrešna lozinka. Pokušaj ponovo.');
-    }
-    loginUser();
+    setErr('');
+    setLoading(true);
+    const result = await login(pwd);
+    setLoading(false);
+    if (result.error) return setErr(result.error);
     onLogin();
   };
 
@@ -54,12 +50,10 @@ export default function LoginScreen({ onLogin }) {
         </div>
 
         <h2 className="serif" style={{ margin: '0 0 8px', fontSize: 26, fontWeight: 500, letterSpacing: '-0.018em' }}>
-          {firstTime ? 'Postavi lozinku' : 'Dobrodošao nazad'}
+          Dobrodošao nazad
         </h2>
         <p style={{ margin: '0 0 28px', fontSize: 13.5, color: 'var(--fg-muted)', lineHeight: 1.55 }}>
-          {firstTime
-            ? 'Ovo je tvoja privatna baza znanja. Postavi lozinku da je zaključaš.'
-            : 'Unesi lozinku da pristupiš svojoj bazi znanja.'}
+          Unesi lozinku da pristupiš svojoj bazi znanja.
         </p>
 
         <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -68,24 +62,18 @@ export default function LoginScreen({ onLogin }) {
             onChange={e => { setPwd(e.target.value); setErr(''); }}
             placeholder="Lozinka" style={inputStyle}
           />
-          {firstTime && (
-            <input
-              type="password" value={pwd2}
-              onChange={e => { setPwd2(e.target.value); setErr(''); }}
-              placeholder="Ponovi lozinku" style={inputStyle}
-            />
-          )}
           {err && (
             <div style={{ fontSize: 12.5, color: 'oklch(0.65 0.2 15)', padding: '6px 2px' }}>{err}</div>
           )}
-          <button type="submit" style={{
+          <button type="submit" disabled={loading} style={{
             marginTop: 6, padding: '11px 20px', fontSize: 14, fontWeight: 500,
-            background: 'var(--fg)', color: 'var(--bg)', borderRadius: 8, cursor: 'pointer',
-            transition: 'opacity 140ms',
+            background: 'var(--fg)', color: 'var(--bg)', borderRadius: 8,
+            cursor: loading ? 'wait' : 'pointer',
+            opacity: loading ? 0.65 : 1, transition: 'opacity 140ms',
           }}
-          onMouseEnter={e => e.currentTarget.style.opacity = '0.88'}
-          onMouseLeave={e => e.currentTarget.style.opacity = '1'}>
-            {firstTime ? 'Postavi i uđi →' : 'Prijavi se →'}
+          onMouseEnter={e => !loading && (e.currentTarget.style.opacity = '0.88')}
+          onMouseLeave={e => !loading && (e.currentTarget.style.opacity = '1')}>
+            {loading ? 'Prijavljivanje…' : 'Prijavi se →'}
           </button>
         </form>
       </div>

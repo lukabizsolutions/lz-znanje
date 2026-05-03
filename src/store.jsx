@@ -1,15 +1,14 @@
 import { createContext, useContext, useState, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
 
-const sb = createClient(
+const OWNER_EMAIL = 'luka.bizsolutions@gmail.com';
+
+export const sb = createClient(
   'https://twtusyefsulzjraympyq.supabase.co',
   'sb_publishable_spE2B1NJ1u_feztT_HLwOA_Jtdx6V21'
 );
 
 const DATA_KEY = 'lz_data_v1';
-const PWD_KEY  = 'lz_pwd';
-const SES_KEY  = 'lz_session';
-
 const EMPTY = { books: [], lessons: [], ideas: [], videos: [], notebook: [] };
 
 function loadLocal() {
@@ -19,16 +18,54 @@ function loadLocal() {
 
 async function fetchRemote() {
   try {
-    const { data, error } = await sb.from('user_data').select('data').eq('id', 'main').single();
-    if (error || !data) return null;
-    return { ...EMPTY, ...data.data };
+    const { data: { user } } = await sb.auth.getUser();
+    if (!user) return null;
+    const { data } = await sb.from('user_data').select('data').eq('user_id', user.id).single();
+    return data ? { ...EMPTY, ...data.data } : EMPTY;
   } catch { return null; }
 }
 
 async function pushRemote(data) {
   try {
-    await sb.from('user_data').upsert({ id: 'main', data, updated_at: new Date().toISOString() });
+    const { data: { user } } = await sb.auth.getUser();
+    if (!user) return;
+    await sb.from('user_data').upsert({ user_id: user.id, data, updated_at: new Date().toISOString() });
   } catch {}
+}
+
+export async function login(password) {
+  if (password.length < 4) return { error: 'Lozinka mora imati najmanje 4 karaktera.' };
+
+  const { error: signInErr } = await sb.auth.signInWithPassword({ email: OWNER_EMAIL, password });
+  if (!signInErr) return { ok: true };
+
+  if (signInErr.message?.toLowerCase().includes('invalid login credentials')) {
+    return { error: 'Pogrešna lozinka. Pokušaj ponovo.' };
+  }
+
+  // First time — create account
+  const { error: signUpErr } = await sb.auth.signUp({ email: OWNER_EMAIL, password });
+  if (signUpErr) return { error: 'Greška: ' + signUpErr.message };
+
+  const { error: signInErr2 } = await sb.auth.signInWithPassword({ email: OWNER_EMAIL, password });
+  if (signInErr2) return { error: 'Nalog kreiran. Pokušaj ponovo da se prijaviš.' };
+
+  return { ok: true };
+}
+
+export async function logout() {
+  await sb.auth.signOut();
+  localStorage.removeItem(DATA_KEY);
+}
+
+export async function checkSession() {
+  const { data: { session } } = await sb.auth.getSession();
+  return !!session;
+}
+
+export function onAuthChange(cb) {
+  const { data: { subscription } } = sb.auth.onAuthStateChange((_, session) => cb(!!session));
+  return () => subscription.unsubscribe();
 }
 
 export function fmtDate() {
@@ -59,13 +96,6 @@ export function tagToPalette(tag) {
   return TAG_PALETTES[tag] || ['#1A1A1A', '#F4EFE6'];
 }
 
-// Auth
-export function hasPassword() { return !!localStorage.getItem(PWD_KEY); }
-export function setPassword(p) { localStorage.setItem(PWD_KEY, btoa(p + '_lznanje')); }
-export function verifyPassword(p) { return localStorage.getItem(PWD_KEY) === btoa(p + '_lznanje'); }
-export function isLoggedIn() { return !!sessionStorage.getItem(SES_KEY); }
-export function loginUser() { sessionStorage.setItem(SES_KEY, '1'); }
-export function logoutUser() { sessionStorage.removeItem(SES_KEY); }
 
 const Ctx = createContext(null);
 
