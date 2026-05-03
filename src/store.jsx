@@ -1,4 +1,10 @@
-import { createContext, useContext, useState } from 'react';
+import { createContext, useContext, useState, useEffect } from 'react';
+import { createClient } from '@supabase/supabase-js';
+
+const sb = createClient(
+  'https://twtusyefsulzjraympyq.supabase.co',
+  'sb_publishable_spE2B1NJ1u_feztT_HLwOA_Jtdx6V21'
+);
 
 const DATA_KEY = 'lz_data_v1';
 const PWD_KEY  = 'lz_pwd';
@@ -6,9 +12,23 @@ const SES_KEY  = 'lz_session';
 
 const EMPTY = { books: [], lessons: [], ideas: [], videos: [], notebook: [] };
 
-function load() {
+function loadLocal() {
   try { return { ...EMPTY, ...JSON.parse(localStorage.getItem(DATA_KEY) || '{}') }; }
   catch { return { ...EMPTY }; }
+}
+
+async function fetchRemote() {
+  try {
+    const { data, error } = await sb.from('user_data').select('data').eq('id', 'main').single();
+    if (error || !data) return null;
+    return { ...EMPTY, ...data.data };
+  } catch { return null; }
+}
+
+async function pushRemote(data) {
+  try {
+    await sb.from('user_data').upsert({ id: 'main', data, updated_at: new Date().toISOString() });
+  } catch {}
 }
 
 export function fmtDate() {
@@ -50,11 +70,23 @@ export function logoutUser() { sessionStorage.removeItem(SES_KEY); }
 const Ctx = createContext(null);
 
 export function StoreProvider({ children }) {
-  const [data, setData] = useState(load);
+  const [data, setData] = useState(loadLocal);
+  const [synced, setSynced] = useState(false);
+
+  useEffect(() => {
+    fetchRemote().then(remote => {
+      if (remote) {
+        setData(remote);
+        localStorage.setItem(DATA_KEY, JSON.stringify(remote));
+      }
+      setSynced(true);
+    });
+  }, []);
 
   const mutate = (fn) => setData(prev => {
     const next = fn(prev);
     localStorage.setItem(DATA_KEY, JSON.stringify(next));
+    pushRemote(next);
     return next;
   });
 
@@ -70,6 +102,7 @@ export function StoreProvider({ children }) {
     <Ctx.Provider value={{
       books: data.books, lessons: data.lessons, ideas: data.ideas,
       videos: data.videos, notebook: data.notebook,
+      synced,
       bookActions:   crud('books'),
       lessonActions: crud('lessons'),
       ideaActions:   crud('ideas'),
